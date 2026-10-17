@@ -57,6 +57,7 @@ export function stripPreferenceMetadata(json: string) {
 }
 
 export const discover = Effect.fn("ConfigDiscovery.discover")(function* (options?: Options) {
+  if (options?.isolated) return { direct: [], project: [], claude: [], agents: [] } satisfies Sources
   const fs = yield* FSUtil.Service
   const global = yield* Global.Service
   const location = yield* Location.Service

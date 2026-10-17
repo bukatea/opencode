@@ -18,6 +18,22 @@ import { ServiceRegistration } from "./services/service-registration"
 import { RemoteTunnel } from "./services/remote-tunnel"
 import { WebUi } from "./services/web-ui"
 import { databasePath } from "./database-path"
+import type { ServerOptions } from "@opencode/server/options"
+
+/** Read the invocation's config inputs without starting a server or changing its datastore. */
+export const configOptions = Effect.gen(function* () {
+  return {
+    isolated: yield* Env.configIsolated,
+    directory: process.env.OPENCODE_CONFIG_DIR,
+    project: !truthy(process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG),
+    // .claude is only read for skills, so both flags gate the same roots.
+    claude: !(
+      truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE) || truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS)
+    ),
+    file: process.env.OPENCODE_CONFIG,
+    content: process.env.OPENCODE_CONFIG_CONTENT,
+  } satisfies NonNullable<ServerOptions["config"]>
+})
 
 export type Mode = "default" | "service" | "stdio"
 
@@ -114,19 +130,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
             file: process.env.OPENCODE_MODELS_PATH,
             fetch: !truthy(process.env.OPENCODE_DISABLE_MODELS_FETCH),
           },
-          config: {
-            directory: process.env.OPENCODE_CONFIG_DIR,
-            project: !truthy(
-              process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
-            ),
-            // .claude is only read for skills, so both flags gate the same roots.
-            claude: !(
-              truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE) ||
-              truthy(process.env.OPENCODE_DISABLE_CLAUDE_CODE_SKILLS)
-            ),
-            file: process.env.OPENCODE_CONFIG,
-            content: process.env.OPENCODE_CONFIG_CONTENT,
-          },
+          config: yield* configOptions,
           windows: {
             gitbash: process.env.OPENCODE_GIT_BASH_PATH,
           },

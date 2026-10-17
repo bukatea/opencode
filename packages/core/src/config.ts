@@ -27,6 +27,8 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
 }
 
 export interface Interface {
+  /** Invocation-owned authored configuration; not a provider execution sandbox. */
+  readonly isolated?: boolean
   /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
   /** Compatibility roots consumed by internal compatibility plugins. */
@@ -45,6 +47,7 @@ export interface Interface {
 }
 
 export const Options = Schema.Struct({
+  isolated: Schema.optional(Schema.Boolean),
   project: Schema.optional(Schema.Boolean),
   // false skips the system and global config dirs, ~/.claude, and ~/.agents;
   // wellknown, file, and content entries still load.
@@ -95,6 +98,34 @@ export const layer = (options?: Options) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
+      if (options?.isolated) {
+        if (options.file !== undefined) return yield* Effect.die(new Error("Isolated config cannot use a config file"))
+        if (!options.content?.trim()) return yield* Effect.die(new Error("Isolated config requires inline content"))
+        const location = yield* Location.Service
+        const text = yield* ConfigVariable.substitute({
+          type: "virtual",
+          source: "OPENCODE_CONFIG_CONTENT",
+          dir: location.directory,
+          text: options.content,
+        }).pipe(Effect.orDie)
+        const errors: ParseError[] = []
+        const result = ConfigNormalize.normalize(parse(text, errors, { allowTrailingComma: true }))
+        if (errors.length || result.type === "rejected" || result.diagnostics.length)
+          return yield* Effect.die(
+            new Error("Isolated config requires valid inline content without normalization diagnostics"),
+          )
+        const info = Schema.decodeUnknownOption(Info)(result.encoded)
+        if (Option.isNone(info)) return yield* Effect.die(new Error("Isolated config requires valid inline content"))
+        if (info.value.plugins?.length)
+          return yield* Effect.die(new Error("Isolated config cannot contain plugin directives"))
+        const document = new Document({ type: "document", info: info.value })
+        return Service.of({
+          isolated: true,
+          entries: () => Effect.succeed([document]),
+          compatibility: () => Effect.succeed({ claude: [], agents: [] }),
+          changes: () => Stream.never,
+        })
+      }
       const fs = yield* FSUtil.Service
       const location = yield* Location.Service
       const watcher = yield* Watcher.Service

@@ -9,6 +9,7 @@ import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { ManagedPolicy } from "../../managed-policy.js"
+import { Config } from "../../config.js"
 import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { Variant } from "../../variant.js"
@@ -182,7 +183,9 @@ function oauth(http: HttpClient.HttpClient) {
   } satisfies IntegrationOAuthMethodRegistration
 }
 
-export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | ManagedPolicy.Service | Scope.Scope>({
+export const OpencodePlugin = define<
+  HttpClient.HttpClient | Bus.Service | ManagedPolicy.Service | Config.Service | Scope.Scope
+>({
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
     const bus = yield* Bus.Service
@@ -191,6 +194,9 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     // and whether it evaluates the policies it is being sent.
     const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
     const managed = yield* ManagedPolicy.Service
+    const config = yield* Config.Service
+    if (config.isolated)
+      yield* Effect.logInfo("isolated configuration excludes account domains", { categories: ["mcp", "websearch"] })
     const scope = yield* Scope.Scope
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
@@ -371,74 +377,76 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
       }
     })
 
-    yield* ctx.websearch.transform((editor) => {
-      const descriptor = snapshot.config?.websearch
-      const connection = snapshot.connection
-      if (!descriptor || !connection) return
-      editor.add({
-        id: descriptor.providerID,
-        name: "OpenCode Web Search",
-        execute: (input) =>
-          Effect.gen(function* () {
-            const active = yield* ctx.integration.connection.active("opencode")
-            if (
-              !active ||
-              (connection.type === "credential"
-                ? active.type !== "credential" || active.id !== connection.id
-                : active.type !== "env" || active.name !== connection.name)
-            ) {
-              return yield* Effect.fail(new Error("OpenCode Console connection changed"))
-            }
-            const credential = yield* ctx.integration.connection.resolve(active)
-            if (!credential || credential.type === "external")
-              return yield* Effect.fail(new Error("OpenCode Console is not connected"))
-            const metadata = credential.metadata
-            const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
-            const token = credential.type === "oauth" ? credential.access : credential.key
-            const server = yield* normalizeServer(serverUrl(credential))
-            const request = yield* HttpClientRequest.post(`${server}/api/websearch`).pipe(
-              HttpClientRequest.acceptJson,
-              HttpClientRequest.bearerToken(token),
-              HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
-              HttpClientRequest.schemaBodyJson(WebSearch.Input)({
-                query: input.query,
-                providerID: descriptor.providerID,
-              }),
-            )
-            const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
-              .execute(request)
-              .pipe(
-                Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
-                Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
-                Effect.scoped,
-                Effect.timeoutOrElse({
-                  duration: Duration.seconds(25),
-                  orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
+    if (!config.isolated)
+      yield* ctx.websearch.transform((editor) => {
+        const descriptor = snapshot.config?.websearch
+        const connection = snapshot.connection
+        if (!descriptor || !connection) return
+        editor.add({
+          id: descriptor.providerID,
+          name: "OpenCode Web Search",
+          execute: (input) =>
+            Effect.gen(function* () {
+              const active = yield* ctx.integration.connection.active("opencode")
+              if (
+                !active ||
+                (connection.type === "credential"
+                  ? active.type !== "credential" || active.id !== connection.id
+                  : active.type !== "env" || active.name !== connection.name)
+              ) {
+                return yield* Effect.fail(new Error("OpenCode Console connection changed"))
+              }
+              const credential = yield* ctx.integration.connection.resolve(active)
+              if (!credential || credential.type === "external")
+                return yield* Effect.fail(new Error("OpenCode Console is not connected"))
+              const metadata = credential.metadata
+              const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
+              const token = credential.type === "oauth" ? credential.access : credential.key
+              const server = yield* normalizeServer(serverUrl(credential))
+              const request = yield* HttpClientRequest.post(`${server}/api/websearch`).pipe(
+                HttpClientRequest.acceptJson,
+                HttpClientRequest.bearerToken(token),
+                HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
+                HttpClientRequest.schemaBodyJson(WebSearch.Input)({
+                  query: input.query,
+                  providerID: descriptor.providerID,
                 }),
               )
-            if (response.providerID !== descriptor.providerID) {
-              return yield* Effect.fail(
-                new Error(
-                  `OpenCode web search returned provider ${response.providerID} instead of ${descriptor.providerID}`,
-                ),
-              )
-            }
-            return response.results
-          }),
+              const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
+                .execute(request)
+                .pipe(
+                  Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+                  Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
+                  Effect.scoped,
+                  Effect.timeoutOrElse({
+                    duration: Duration.seconds(25),
+                    orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
+                  }),
+                )
+              if (response.providerID !== descriptor.providerID) {
+                return yield* Effect.fail(
+                  new Error(
+                    `OpenCode web search returned provider ${response.providerID} instead of ${descriptor.providerID}`,
+                  ),
+                )
+              }
+              return response.results
+            }),
+        })
+        editor.default.set(descriptor.providerID)
       })
-      editor.default.set(descriptor.providerID)
-    })
 
-    yield* ctx.mcp.transform((editor) => {
-      const mcp = snapshot.mcp
-      if (!mcp) return
-      for (const [name, server] of Object.entries(mcp.servers)) {
-        // A server the user configured under the same name wins.
-        if (editor.get(name)) continue
-        const { auth, ...config } = server
-        editor.set(name, auth === "console" ? { ...config, headers: { ...config.headers, ...mcp.headers } } : config)
-      }
-    })
+    if (!config.isolated)
+      yield* ctx.mcp.transform((editor) => {
+        const mcp = snapshot.mcp
+        if (!mcp) return
+        for (const [name, server] of Object.entries(mcp.servers)) {
+          // A server the user configured under the same name wins.
+          if (editor.get(name)) continue
+          const { auth, ...config } = server
+          editor.set(name, auth === "console" ? { ...config, headers: { ...config.headers, ...mcp.headers } } : config)
+        }
+      })
 
     const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
       snapshot = next

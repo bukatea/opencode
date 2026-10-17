@@ -68,6 +68,24 @@ Pairing requires the shared service and is unavailable while it is disabled.
 
 See [Troubleshooting](/troubleshooting) for shared service diagnostics and the [API reference](/api) for server endpoints.
 
+## Invocation-owned configuration
+
+The new `OPENCODE_CONFIG_ISOLATED` environment option accepts only `true` or
+`false`; unset means normal behavior. When `true`, explicit `--standalone` and
+valid `OPENCODE_CONFIG_CONTENT` are required. `--server`, the implicit managed
+service path, and an explicit config file are not supported. Connection-mode
+rejection happens before remote health checks, service discovery or child startup.
+Setting the variable cannot reconfigure an already running server. There is no
+new `--pure` or `--config-isolated` CLI flag, and older installed versions need
+not support this environment option.
+
+See [invocation-owned configuration](/config#invocation-owned-configuration) for
+strict content errors and the exact boundaries: existing provider/account
+executable trust and connected Console policy load/error/refresh remain;
+datastore identity is retained. Authored global/well-known/system/MDM policy is
+excluded, making deployments requiring those channels unsupported. This is not
+zero ambient execution, an OS sandbox, or a change to session/subagent permissions.
+
 ## Paths
 
 Print a specific local path for use with other tools:

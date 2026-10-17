@@ -10,6 +10,7 @@ import { EventLogger } from "@opencode/core/event-logger"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
 import { Credential } from "@opencode/core/credential"
 import { Config } from "@opencode/core/config"
+import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
@@ -124,13 +125,21 @@ function makeRoutes<AuthError, AuthServices>(
     Global.node.replace(Global.layerWith(options.config?.directory ? { config: options.config.directory } : {})),
     Config.node.replace(
       Config.configured({
+        isolated: options.config?.isolated,
         project: options.config?.project,
         claude: options.config?.claude,
         file: options.config?.file,
         content: options.config?.content,
       }),
     ),
-    InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: options.config?.project })),
+    InstructionDiscovery.node.replace(
+      InstructionDiscovery.configured(
+        options.config?.isolated ? { project: false, global: false } : { project: options.config?.project },
+      ),
+    ),
+    ...(options.config?.isolated
+      ? [ConfigPluginSource.node.replace(ConfigPluginSource.empty), WellKnown.node.replace(WellKnown.disabled)]
+      : []),
     ShellSelect.node.replace(ShellSelect.configured({ gitbash: options.windows?.gitbash })),
     Mcp.node.replace(
       Mcp.configured({

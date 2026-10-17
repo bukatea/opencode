@@ -217,3 +217,22 @@ const layer = Layer.effect(
 )
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [httpClient, KV.node, Bus.node] })
+
+/** No persisted sources, manifest authentication or remote configuration in this composition. */
+export const disabled = makeGlobalNode({
+  service: Service,
+  deps: [],
+  layer: Layer.succeed(
+    Service,
+    Service.of({
+      entries: () => Effect.succeed([]),
+      snapshot: () => [],
+      refresh: () => Effect.succeed(false),
+      cached: () => Effect.succeed([]),
+      add: () => Effect.fail(new Error("Well-known configuration is disabled")),
+      resolve: () => Effect.fail(new Error("Well-known configuration is disabled")),
+      // remove has no error channel; fail as a defect rather than silently deleting persisted state.
+      remove: () => Effect.die(new Error("Well-known configuration is disabled")),
+    }),
+  ),
+})

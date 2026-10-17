@@ -26,6 +26,7 @@ export const ServerOptions = Schema.Struct({
   models: Schema.optional(ModelsDev.Options),
   config: Schema.optional(
     Schema.Struct({
+      isolated: Schema.optional(Schema.Boolean),
       directory: Schema.optional(Schema.String),
       project: Schema.optional(Schema.Boolean),
       claude: Schema.optional(Schema.Boolean),

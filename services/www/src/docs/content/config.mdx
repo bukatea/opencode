@@ -108,6 +108,50 @@ Settings that do not conflict are preserved. [Policies](/policies#precedence)
 from global and project files evaluate in the reverse order, and system
 policies outrank all of them.
 
+## Invocation-owned configuration
+
+Invocation-owned configuration is a new opt-in feature, not a `--pure` flag or
+an equivalent sandbox. In versions containing this feature, set
+`OPENCODE_CONFIG_ISOLATED` to exactly `true` and provide `OPENCODE_CONFIG_CONTENT`.
+The CLI requires explicit `--standalone` without `--server`; disabling the shared
+service alone is not sufficient. An unset variable or exactly `false` keeps normal
+configuration behavior, including the system and MDM precedence described above.
+Other values, including an empty string, are errors.
+
+The inline JSON or JSONC must normalize to valid configuration without diagnostics.
+Missing, empty, malformed, rejected or diagnostic-bearing content fails startup;
+there is no fallback to ambient configuration. `OPENCODE_CONFIG` conflicts with
+this mode. Nonempty plugin directives, including removals, are rejected even when
+supplied inline. Explicit inline substitutions still work.
+
+In the standard server composition, this inline document is the only
+discovered/authored Config document. System, macOS managed preferences, global,
+project, compatibility and stored well-known configuration are not loaded or
+refreshed. Their config-root watchers and boot/config-discovery instructions are
+excluded, and Config updates are unavailable rather than writing a global file.
+Account-delivered MCP and websearch additions are not registered. See
+[plugins](/plugins#invocation-owned-configuration) for the external-plugin barrier.
+
+The existing datastore and credential identity are retained, not isolated.
+Provider/account execution trust remains: provider packages, model packages,
+endpoints, authentication and refresh can still affect execution. Connected
+Console organization [policy](/policies) retains its existing load, error and
+refresh behavior, including retaining a loaded snapshot after a same-connection
+transient failure. This does not add a cold-start fail-closed policy guarantee.
+
+Authored policies from excluded global, well-known, system or MDM sources are
+also excluded; they are not migrated into Console policy. **This mode is
+unsupported for deployments that require mandatory policy through those excluded
+channels.** Use the normal policy deployment instead.
+
+Use-triggered nested [instructions](/instructions), resumed/session and subagent
+[permissions](/permissions), native provider behavior and OS capabilities are
+unchanged. This is not a promise of zero ambient execution or read-only tool
+equivalence. Embedding hosts opt in with `ServerOptions.config.isolated`; direct
+Core callers use `Config.Options.isolated` for strict document loading, while the
+standard server composition owns the wider plugin/instruction/source barriers.
+Trusted host replacements can override that composition.
+
 ## Schema
 
 The complete OpenCode configuration schema is available at

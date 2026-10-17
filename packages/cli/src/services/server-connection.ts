@@ -19,6 +19,9 @@ export type Resolved = {
 }
 
 export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args = {}) {
+  const isolated = yield* Env.configIsolated
+  if (isolated && (args.standalone !== true || args.server !== undefined))
+    return yield* Effect.fail(new Error("Isolated config requires explicit --standalone without --server"))
   if (args.server !== undefined && args.standalone)
     return yield* Effect.fail(new Error("--server and --standalone cannot be combined"))
   if (args.server !== undefined) {

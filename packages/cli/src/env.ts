@@ -1,4 +1,4 @@
-import { Config } from "effect"
+import { Config, Effect } from "effect"
 
 // Every environment variable the CLI reads, in one place. Consumers yield
 // these instead of touching process.env so the full surface stays visible,
@@ -11,6 +11,15 @@ export const password = Config.Redacted("OPENCODE_PASSWORD").pipe(
   Config.orElse(() => Config.Redacted("OPENCODE_SERVER_PASSWORD")),
   Config.withDefault(undefined),
 )
+
+/** Deliberately stricter than legacy truthy flags; never echo an invalid value. */
+export const configIsolated = Effect.suspend(() => {
+  const value = process.env.OPENCODE_CONFIG_ISOLATED
+  if (value === undefined) return Effect.succeed(undefined)
+  if (value === "true") return Effect.succeed(true)
+  if (value === "false") return Effect.succeed(false)
+  return Effect.fail(new Error("OPENCODE_CONFIG_ISOLATED must be true or false"))
+})
 
 export function session() {
   return Object.fromEntries(

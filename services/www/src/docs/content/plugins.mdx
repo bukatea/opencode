@@ -61,7 +61,7 @@ explicitly or move it under `.opencode/`.
 
 ```jsonc title="opencode.jsonc"
 {
-  "plugins": ["./plugins/local"]
+  "plugins": ["./plugins/local"],
 }
 ```
 
@@ -72,7 +72,7 @@ use `.*` to match an ID prefix. A later ID re-enables a plugin.
 
 ```jsonc title="opencode.jsonc"
 {
-  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"]
+  "plugins": ["*", "-opencode.provider.*", "opencode.provider.openai", "-acme.reviewer"],
 }
 ```
 
@@ -80,6 +80,30 @@ Two built-in plugins ignore removals so that a repository cannot switch off
 [policy](/policies) enforcement: `opencode.config.policy` and
 `opencode.provider.opencode`, the Console connection that delivers organization
 policy.
+
+## Invocation-owned configuration
+
+The new [invocation-owned configuration](/config#invocation-owned-configuration)
+mode removes external `ConfigPluginSource` operations in the standard server
+composition before plugin install, import, activation or watching. This covers
+discovered and stored configuration, including an add followed by a wildcard
+removal: ordinary ordered removal happens too late to prevent the earlier import.
+Nonempty inline plugin directives are rejected, not executed and then removed.
+The same composition applies to lazily created private instances.
+
+This does not remove native plugins or redefine provider trust. Account-selected
+provider/model packages and endpoints remain executable authority; provider
+authentication and refresh are unchanged. Connected Console organization policy
+still loads, enforces and refreshes with its existing error behavior, while
+account MCP/websearch additions are not registered. Policies authored in excluded
+global, well-known, system or MDM configuration do not survive source exclusion;
+deployments requiring them are unsupported in this mode. Builtin protection and
+normal plugin behavior remain unchanged when the option is absent or false.
+
+This is neither `--pure` equivalence nor a zero-ambient-execution guarantee.
+Nested use-triggered instructions, session/subagent permissions, native providers
+and OS capabilities retain their existing behavior; trusted embedding hosts can
+deliberately replace the standard composition.
 
 ## Manage
 

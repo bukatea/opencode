@@ -19,9 +19,7 @@ export type Resolved = {
 }
 
 export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args = {}) {
-  const isolated = yield* Env.configIsolated
-  if (isolated && (args.standalone !== true || args.server !== undefined))
-    return yield* Effect.fail(new Error("Isolated config requires explicit --standalone without --server"))
+  yield* Env.requireConfigOwner(args.standalone === true && args.server === undefined)
   if (args.server !== undefined && args.standalone)
     return yield* Effect.fail(new Error("--server and --standalone cannot be combined"))
   if (args.server !== undefined) {
@@ -68,6 +66,7 @@ function managedService(options: EnsureOptions) {
 export const shutdownPersistentPty = Effect.fn("cli.server-connection.shutdown-persistent-pty")(function* (
   options: EnsureOptions,
 ) {
+  yield* Env.requireConfigOwner(false)
   const endpoint = yield* Service.discover({ ...options, version: undefined })
   if (!endpoint) return
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })

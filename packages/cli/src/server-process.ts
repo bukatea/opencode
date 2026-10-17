@@ -46,6 +46,9 @@ export type Options = {
 
 // The process effect lives until server shutdown; tracing it would parent every request to one process-lifetime trace.
 export const run = Effect.fnUntraced(function* (options: Options) {
+  // Direct desktop/service callers do not pass through the CLI handler wrapper.
+  // Admit before acquiring layers, reading saved settings or probing incumbents.
+  yield* Env.requireConfigOwner(options.mode !== "service")
   return yield* processEffect(options).pipe(
     Effect.provide(
       LayerNode.compile(LayerNode.group([Global.node, AppProcess.node]), {

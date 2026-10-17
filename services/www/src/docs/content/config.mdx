@@ -118,6 +118,14 @@ service alone is not sufficient. An unset variable or exactly `false` keeps norm
 configuration behavior, including the system and MDM precedence described above.
 Other values, including an empty string, are errors.
 
+CLI commands without an explicit standalone ownership option, including pairing,
+managed-service commands and ACP, reject this mode before service/connection/child
+activity. The V1 compatibility run API is likewise unsupported. Foreground
+`serve` and its leased `--stdio` server-owner path retain their explicit owner
+contract; `serve --service` is not an invocation-owned server and rejects the
+mode before reading saved service settings or probing an incumbent. See the
+[CLI ownership rules](/cli#invocation-owned-configuration).
+
 The inline JSON or JSONC must normalize to valid configuration without diagnostics.
 Missing, empty, malformed, rejected or diagnostic-bearing content fails startup;
 there is no fallback to ambient configuration. `OPENCODE_CONFIG` conflicts with

@@ -79,6 +79,17 @@ Setting the variable cannot reconfigure an already running server. There is no
 new `--pure` or `--config-isolated` CLI flag, and older installed versions need
 not support this environment option.
 
+Commands that cannot express explicit standalone ownership are unsupported in
+this mode, including `pair`, all `service` commands, and `acp` (including
+`acp --login`). They reject before their handler performs service reads, pairing,
+connection or child startup; an implicitly private ACP child is not explicit
+standalone consent. Other commands without a `--standalone` option also reject.
+The V1 compatibility run API has no explicit ownership input and is unsupported.
+The explicit server-owner API remains available: foreground `serve` and the
+leased `serve --stdio` child honor the mode, but `serve --service` rejects it
+before saved service configuration or incumbent discovery, including direct
+server-process callers. Unset or exactly `false` preserves ordinary commands.
+
 See [invocation-owned configuration](/config#invocation-owned-configuration) for
 strict content errors and the exact boundaries: existing provider/account
 executable trust and connected Console policy load/error/refresh remain;

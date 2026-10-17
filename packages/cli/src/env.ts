@@ -21,6 +21,14 @@ export const configIsolated = Effect.suspend(() => {
   return Effect.fail(new Error("OPENCODE_CONFIG_ISOLATED must be true or false"))
 })
 
+/** Ownership must be explicit at the command boundary, not inferred from a new child or saved settings. */
+export const requireConfigOwner = Effect.fnUntraced(function* (owned: boolean) {
+  if ((yield* configIsolated) && !owned)
+    return yield* Effect.fail(
+      new Error("Isolated config requires explicit --standalone without --server; unsupported for this command"),
+    )
+})
+
 export function session() {
   return Object.fromEntries(
     Object.entries(process.env).filter(
